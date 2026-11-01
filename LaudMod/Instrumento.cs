@@ -18,6 +18,8 @@ namespace LaudMod
         public bool Sostenido;        // true = suena mientras mantienes la tecla (flauta)
         public bool Colgable = true;  // false = no se puede colgar en los ganchos (nacaires)
         public string[] Sonidos;      // nombres de los sonidos dentro del paquete, en orden de tecla
+        public string[] SonidosSuaves; // version suave de cada nota (punteo flojo); null = no hay
+        public string SonidoFondo;    // sonido que suena de fondo mientras tocas (bordon de la zanfona); null = ninguno
         public string[] NombresNotas; // como aparecen en el .cfg
         public KeyCode[] TeclasDefecto;
 
@@ -29,7 +31,7 @@ namespace LaudMod
 
         // ---- Ajustes del .cfg ----
         public ConfigEntry<KeyCode>[] Teclas;
-        public ConfigEntry<float> Volumen;
+        public ConfigEntry<float> Volumen, VolumenFondo;
         public ConfigEntry<float> TocarDistancia, TocarAltura, TocarLateral, TocarGiroX, TocarGiroY, TocarGiroZ;
         public ConfigEntry<float> ManoDistancia, ManoAltura, ReposoGiroX, ReposoGiroY, ReposoGiroZ;
         public ConfigEntry<string> TiendaEscena, TiendaRaiz;
@@ -38,6 +40,8 @@ namespace LaudMod
 
         // ---- Lo que se rellena al jugar ----
         public AudioClip[] Clips = new AudioClip[0];
+        public AudioClip ClipFondo;
+        public AudioClip[] ClipsSuaves = new AudioClip[0];
         public GameObject Prefab;
         public bool Registrado;
         public GameObject Puesto;
@@ -60,6 +64,10 @@ namespace LaudMod
                     "Key for note " + (i + 1) + " (" + NombresNotas[i] + "). Examples: Alpha6, Y, Z, Keypad1, F5");
             }
             Volumen = publico.Bind(Sec("Sound"), "Volume", 1f, "Volume (0 to 1)");
+            if (SonidoFondo != null)
+            {
+                VolumenFondo = publico.Bind(Sec("Sound"), "DroneVolume", 0.6f, "Volume of the drone that plays in the background while you play (0 to 1)");
+            }
 
             ConfigFile c = interno;
             TocarDistancia = c.Bind(Sec("Posicion al tocar"), "Distancia", DefTocar[0], "Distancia a la camara en modo tocar");

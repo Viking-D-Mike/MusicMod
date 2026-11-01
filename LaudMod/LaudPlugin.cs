@@ -9,11 +9,11 @@ using UnityEngine.SceneManagement;
 
 namespace LaudMod
 {
-    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.0.0")]
+    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.1.0")]
     public class LaudPlugin : BaseUnityPlugin
     {
         // Los tres instrumentos del mod
-        public static Instrumento Laud, Flauta, Nacaires;
+        public static Instrumento Laud, Flauta, Nacaires, Zanfona;
         public static Instrumento[] Todos = new Instrumento[0];
 
         // Piezas de HooksHangMore (si esta instalado) para cambiar la posicion de colgado en vivo
@@ -29,13 +29,15 @@ namespace LaudMod
 
         private void Awake()
         {
-            Logger.LogInfo("MusicMod cargado correctamente: laud, flauta xiao y nacaires");
+            Logger.LogInfo("MusicMod cargado correctamente: laud, flauta xiao, nacaires y zanfona");
 
             Laud = new Instrumento
             {
                 Clave = "laud", NombrePrefab = "laud", NombreObjeto = "lute", Prefijo = "Lute - ",
                 Indice = 20391, Precio = 150, Masa = 2f, AlturaMueble = 0.15f, Sostenido = false,
                 Sonidos = new[] { "nota1_do", "nota2_re", "nota3_mi", "nota_fa", "nota4_sol", "nota5_la", "nota_si", "nota_do_alto" },
+                SonidosSuaves = new[] { "nota1_do_suave", "nota2_re_suave", "nota3_mi_suave", "nota_fa_suave", "nota4_sol_suave",
+                                        "nota5_la_suave", "nota_si_suave", "nota_do_alto_suave" },
                 NombresNotas = new[] { "C", "D", "E", "F", "G", "A", "B", "HighC" },
                 TeclasDefecto = new[] { KeyCode.Alpha6, KeyCode.Alpha7, KeyCode.Alpha8, KeyCode.Alpha9, KeyCode.Alpha0,
                                         KeyCode.Y, KeyCode.U, KeyCode.I },
@@ -74,7 +76,7 @@ namespace LaudMod
                 DefTocar = new[] { 0.5f, -0.45f, 0f, 0f, 0f, 0f },
                 DefMano = new[] { 0.45f, -0.1f, 0f, 0f, 0f },
                 DefEscena = "island 3 A Neverdin", DefRaiz = "island 3 A (neverdin) scenery",
-                DefTienda = new[] { 106.973f, 10.581f, -18.371f, 0f, 0f },
+                DefTienda = new[] { 106.973f, 10.60f, -18.371f, 0f, 0f },
                 Colgable = false
             };
 
@@ -91,7 +93,26 @@ namespace LaudMod
             KeyCode localizarDefecto = KeyCode.None;
 #endif
 
-            Todos = new[] { Laud, Flauta, Nacaires };
+            // La zanfona se vende en la taberna de Aestra Abbey (la isla del monasterio)
+            Zanfona = new Instrumento
+            {
+                Clave = "zanfona", NombrePrefab = "zanfona", NombreObjeto = "hurdy gurdy", Prefijo = "Hurdy Gurdy - ",
+                Indice = 20394, Precio = 200, Masa = 3f, AlturaMueble = 0.12f, Sostenido = true, Colgable = false,
+                Sonidos = new[] { "zanfona_nota01_mi", "zanfona_nota02_fa_sost", "zanfona_nota03_sol_sost", "zanfona_nota04_la",
+                                  "zanfona_nota05_si", "zanfona_nota06_do_sost", "zanfona_nota07_re_sost", "zanfona_nota08_mi",
+                                  "zanfona_nota09_fa_sost", "zanfona_nota10_sol_sost" },
+                SonidoFondo = "zanfona_bordon",
+                NombresNotas = new[] { "E", "FSharp", "GSharp", "A", "B", "CSharp", "DSharp", "HighE", "HighFSharp", "HighGSharp" },
+                TeclasDefecto = new[] { KeyCode.Alpha6, KeyCode.Alpha7, KeyCode.Alpha8, KeyCode.Alpha9, KeyCode.Alpha0,
+                                        KeyCode.Y, KeyCode.U, KeyCode.I, KeyCode.O, KeyCode.P },
+                DefTocar = new[] { 0.5f, -0.3f, 0.125f, 350f, 180f, 0f },
+                DefMano = new[] { 0.5f, 0f, 8f, 240f, 90f },
+                DefEscena = "island 34 M (monastery)", DefRaiz = "_scenery",
+                DefTienda = new[] { 420.158f, 4.386f, 391.355f, 0f, 0f },
+                DefColgado = new[] { 0f, 0f, 0f, 0f, 0f, 0f }
+            };
+
+            Todos = new[] { Laud, Flauta, Nacaires, Zanfona };
             foreach (Instrumento ins in Todos)
             {
                 ins.Atar(Config, interno);
@@ -256,6 +277,22 @@ namespace LaudMod
                     }
                 }
                 Logger.LogInfo(ins.Clave + ": sonidos cargados " + encontrados + " de " + ins.Sonidos.Length);
+                if (ins.SonidosSuaves != null)
+                {
+                    ins.ClipsSuaves = new AudioClip[ins.SonidosSuaves.Length];
+                    int suaves = 0;
+                    for (int i = 0; i < ins.SonidosSuaves.Length; i++)
+                    {
+                        ins.ClipsSuaves[i] = paquete.LoadAsset<AudioClip>(ins.SonidosSuaves[i]);
+                        if (ins.ClipsSuaves[i] != null) suaves++;
+                    }
+                    Logger.LogInfo(ins.Clave + ": sonidos suaves cargados " + suaves + " de " + ins.SonidosSuaves.Length);
+                }
+                if (ins.SonidoFondo != null)
+                {
+                    ins.ClipFondo = paquete.LoadAsset<AudioClip>(ins.SonidoFondo);
+                    Logger.LogInfo(ins.Clave + ": sonido de fondo " + (ins.ClipFondo != null ? "cargado" : "NO encontrado (" + ins.SonidoFondo + ")"));
+                }
             }
 
             while (PrefabsDirectory.instance == null)
@@ -316,6 +353,10 @@ namespace LaudMod
             else if (ins == Nacaires)
             {
                 item = prefab.AddComponent<NacairesItem>();
+            }
+            else if (ins == Zanfona)
+            {
+                item = prefab.AddComponent<ZanfonaItem>();
             }
             else
             {
@@ -415,10 +456,31 @@ namespace LaudMod
                 yield return new WaitForSeconds(1f);
             }
 
+            // Se busca la raiz dentro de la escena de la isla: algunas islas tienen raices con nombres
+            // genericos (como "_scenery") que tambien existen en otras islas
             GameObject raiz = null;
             for (int i = 0; i < 30; i++)
             {
-                raiz = GameObject.Find(ins.TiendaRaiz.Value);
+                Scene escena = SceneManager.GetSceneByName(ins.TiendaEscena.Value);
+                if (escena.isLoaded)
+                {
+                    foreach (GameObject candidato in escena.GetRootGameObjects())
+                    {
+                        if (candidato.name == ins.TiendaRaiz.Value)
+                        {
+                            raiz = candidato;
+                            break;
+                        }
+                    }
+                }
+                if (raiz == null)
+                {
+                    raiz = GameObject.Find(ins.TiendaRaiz.Value);
+                    if (raiz != null && raiz.scene.name != ins.TiendaEscena.Value && escena.isLoaded)
+                    {
+                        raiz = null;
+                    }
+                }
                 if (raiz != null)
                 {
                     break;

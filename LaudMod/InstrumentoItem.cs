@@ -141,7 +141,19 @@ namespace LaudMod
             {
                 return;
             }
-            fuente.PlayOneShot(d.Clips[nota], d.Volumen.Value * Random.Range(0.9f, 1f));
+            // Fuerza de cada golpe: a veces suave (sonido mas apagado y flojo), a veces fuerte
+            AudioClip clip = d.Clips[nota];
+            float fuerza;
+            if (d.ClipsSuaves != null && nota < d.ClipsSuaves.Length && d.ClipsSuaves[nota] != null && Random.value < 0.45f)
+            {
+                clip = d.ClipsSuaves[nota];
+                fuerza = Random.Range(0.6f, 0.85f);
+            }
+            else
+            {
+                fuerza = Random.Range(0.8f, 1f);
+            }
+            fuente.PlayOneShot(clip, d.Volumen.Value * fuerza);
         }
     }
 
@@ -151,21 +163,80 @@ namespace LaudMod
         public override Instrumento Datos { get { return LaudPlugin.Nacaires; } }
     }
 
+    // Aplica el volumen muestra a muestra en el hilo de audio, interpolando entre el valor
+    // anterior y el nuevo. Asi los fundidos son suaves de verdad: si se cambiara el volumen
+    // de golpe en cada fotograma, se oirian pequenos chasquidos en cada escalon.
+    public class RampaVolumen : MonoBehaviour
+    {
+        [System.NonSerialized] public volatile float objetivo;
+        private volatile float actual;
+
+        public float Actual { get { return actual; } }
+
+        private void OnAudioFilterRead(float[] datos, int canales)
+        {
+            float fin = objetivo;
+            int muestras = canales > 0 ? datos.Length / canales : 0;
+            if (muestras <= 0)
+            {
+                return;
+            }
+            float g = actual;
+            float paso = (fin - g) / muestras;
+            for (int m = 0; m < muestras; m++)
+            {
+                g += paso;
+                int baseIndice = m * canales;
+                for (int c = 0; c < canales; c++)
+                {
+                    datos[baseIndice + c] *= g;
+                }
+            }
+            actual = fin;
+        }
+
+        // Crea una "voz": un objeto hijo con su propia fuente de sonido y su rampa de volumen
+        public static AudioSource CrearVoz(GameObject padre, AudioSource modelo, string nombre, out RampaVolumen rampa)
+        {
+            GameObject go = new GameObject(nombre);
+            go.transform.SetParent(padre.transform, false);
+            AudioSource s = go.AddComponent<AudioSource>();
+            s.playOnAwake = false;
+            s.loop = true;
+            s.volume = 1f;
+            if (modelo != null)
+            {
+                s.spatialBlend = modelo.spatialBlend;
+                s.rolloffMode = modelo.rolloffMode;
+                s.minDistance = modelo.minDistance;
+                s.maxDistance = modelo.maxDistance;
+                s.outputAudioMixerGroup = modelo.outputAudioMixerGroup;
+            }
+            rampa = go.AddComponent<RampaVolumen>();
+            rampa.objetivo = 0f;
+            return s;
+        }
+    }
+
     // La flauta suena mientras mantienes la tecla, y se apaga suavemente al soltarla.
-    // Usa dos fuentes de sonido que se turnan: al cambiar de nota, la vieja se apaga
-    // mientras la nueva entra (fundido cruzado), con un pequeno deslizamiento de tono.
+    // Usa varias fuentes de sonido: cada nota nueva entra por una que este en silencio,
+    // mientras la anterior se apaga (fundido cruzado), con un pequeno deslizamiento de tono.
+    // Asi, aunque cambies de nota muy deprisa, nunca se corta en seco un sonido (no hay chasquidos).
     [DefaultExecutionOrder(1000)]
     public class FlautaItem : InstrumentoItem
     {
+        private const int numFuentes = 6;
         private const float subida = 12f;          // entra desde el silencio en ~0,08 s
         private const float bajada = 7f;           // se apaga al soltar en ~0,15 s
-        private const float cruce = 16f;           // fundido entre notas en ~0,06 s
+        private const float cruce = 16f;           // la nota nueva entra en ~0,06 s
+        private const float salida = 6f;           // la nota anterior se apaga en ~0,17 s (se solapan, sin corte)
         private const float tiempoDeslizar = 0.06f;
-        // Semitonos de cada nota respecto a la primera (Re Mi Fa# Sol La Si Do# Re)
-        private static readonly int[] semitonos = { 0, 2, 4, 5, 7, 9, 11, 12 };
+        // Semitonos de cada nota respecto a la primera (escala mayor: flauta 8 notas, zanfona 10)
+        private static readonly int[] semitonos = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16 };
 
         private AudioSource[] fuentes;
-        private readonly float[] vols = new float[2];
+        private RampaVolumen[] rampas;
+        private readonly float[] vols = new float[numFuentes];
         private int activa;
         private int notaActual = -1;
         private int notaSonando = -1;
@@ -176,27 +247,42 @@ namespace LaudMod
 
         private bool PrepararFuentes()
         {
-            if (fuentes != null && fuentes[0] != null && fuentes[1] != null)
+            if (fuentes != null && fuentes[0] != null)
             {
                 return true;
             }
-            AudioSource a = GetComponent<AudioSource>();
-            if (a == null)
+            AudioSource modelo = GetComponent<AudioSource>();
+            if (modelo == null)
             {
                 return false;
             }
-            AudioSource b = gameObject.AddComponent<AudioSource>();
-            b.playOnAwake = false;
-            b.loop = true;
-            b.spatialBlend = a.spatialBlend;
-            b.rolloffMode = a.rolloffMode;
-            b.minDistance = a.minDistance;
-            b.maxDistance = a.maxDistance;
-            b.outputAudioMixerGroup = a.outputAudioMixerGroup;
-            b.volume = 0f;
-            a.loop = true;
-            fuentes = new[] { a, b };
+            fuentes = new AudioSource[numFuentes];
+            rampas = new RampaVolumen[numFuentes];
+            for (int i = 0; i < numFuentes; i++)
+            {
+                fuentes[i] = RampaVolumen.CrearVoz(gameObject, modelo, "voz " + i, out rampas[i]);
+            }
             return true;
+        }
+
+        // La fuente mas silenciosa (que no sea la activa) para la nota nueva
+        private int FuenteLibre()
+        {
+            int mejor = -1;
+            float menor = float.MaxValue;
+            for (int i = 0; i < numFuentes; i++)
+            {
+                if (i == activa && vols[i] > 0.001f)
+                {
+                    continue;
+                }
+                if (vols[i] < menor)
+                {
+                    menor = vols[i];
+                    mejor = i;
+                }
+            }
+            return mejor < 0 ? activa : mejor;
         }
 
         protected override void LeerTeclas(bool activo)
@@ -239,25 +325,28 @@ namespace LaudMod
 
             bool hayNota = notaActual >= 0 && notaActual < d.Clips.Length && d.Clips[notaActual] != null;
 
-            // Nota nueva: entra por la otra fuente si la actual aun suena
+            // Nota nueva: entra por una fuente en silencio
             if (hayNota && notaActual != notaSonando)
             {
                 int anterior = notaSonando;
-                if (vols[activa] > 0.001f)
-                {
-                    activa = 1 - activa;
-                }
+                activa = FuenteLibre();
                 AudioSource nueva = fuentes[activa];
-                nueva.Stop();
-                nueva.clip = d.Clips[notaActual];
-                nueva.loop = true;
-                vols[activa] = 0f;
-                nueva.volume = 0f;
+                if (nueva.clip != d.Clips[notaActual] || !nueva.isPlaying)
+                {
+                    nueva.Stop();
+                    nueva.clip = d.Clips[notaActual];
+                    nueva.loop = true;
+                    vols[activa] = 0f;
+                    rampas[activa].objetivo = 0f;
+                    nueva.Play();
+                }
 
                 if (anterior >= 0 && anterior < semitonos.Length && notaActual < semitonos.Length)
                 {
-                    // Empieza a medio camino desde la nota anterior y llega a la suya en 0,06 s
-                    tonoInicio = Mathf.Pow(2f, (semitonos[anterior] - semitonos[notaActual]) / 24f);
+                    // Empieza un poco desplazada hacia la nota anterior (como mucho 1,5 semitonos,
+                    // para que en los saltos grandes no suene un "silbido") y llega a la suya en 0,06 s
+                    float desvio = Mathf.Clamp((semitonos[anterior] - semitonos[notaActual]) * 0.5f, -1.5f, 1.5f);
+                    tonoInicio = Mathf.Pow(2f, desvio / 12f);
                     deslizar = 0f;
                 }
                 else
@@ -266,7 +355,6 @@ namespace LaudMod
                     deslizar = tiempoDeslizar;
                 }
                 nueva.pitch = tonoInicio;
-                nueva.Play();
                 notaSonando = notaActual;
             }
             if (!hayNota)
@@ -289,8 +377,15 @@ namespace LaudMod
 
             // Volumen de cada fuente
             float volumenMax = Mathf.Max(d.Volumen.Value, 0.01f);
-            bool cruzando = vols[1 - activa] > 0.001f;
-            for (int i = 0; i < 2; i++)
+            bool cruzando = false;
+            for (int i = 0; i < numFuentes; i++)
+            {
+                if (i != activa && vols[i] > 0.001f)
+                {
+                    cruzando = true;
+                }
+            }
+            for (int i = 0; i < numFuentes; i++)
             {
                 bool esActiva = i == activa;
                 float objetivo = (esActiva && hayNota) ? d.Volumen.Value : 0f;
@@ -301,14 +396,74 @@ namespace LaudMod
                 }
                 else
                 {
-                    velocidad = esActiva ? bajada : cruce;
+                    velocidad = esActiva ? bajada : salida;
                 }
                 vols[i] = Mathf.MoveTowards(vols[i], objetivo, Time.deltaTime * velocidad * volumenMax);
-                fuentes[i].volume = vols[i];
-                if (vols[i] <= 0.0001f && objetivo <= 0f && fuentes[i].isPlaying)
+                rampas[i].objetivo = vols[i];
+                if (vols[i] <= 0.0001f && objetivo <= 0f && rampas[i].Actual <= 0.0001f && fuentes[i].isPlaying)
                 {
                     fuentes[i].Stop();
+                    fuentes[i].pitch = 1f;
                 }
+            }
+        }
+    }
+
+    // La zanfona: las notas funcionan como la flauta (suenan mientras mantienes la tecla),
+    // y ademas, mientras estas en modo tocar, suena el bordon de fondo y gira la manivela.
+    [DefaultExecutionOrder(1000)]
+    public class ZanfonaItem : FlautaItem
+    {
+        private const float velocidadFondo = 2.5f;   // el bordon entra y sale en ~0,4 s
+        private const float vueltasPorSegundo = 1.2f;
+
+        private AudioSource fondo;
+        private RampaVolumen rampaFondo;
+        private float volFondo;
+        private Transform manivela;
+        private bool buscadaManivela;
+
+        public override Instrumento Datos { get { return LaudPlugin.Zanfona; } }
+
+        protected override void LeerTeclas(bool activo)
+        {
+            base.LeerTeclas(activo);
+
+            Instrumento d = Datos;
+            if (d == null || d.ClipFondo == null)
+            {
+                return;
+            }
+
+            if (fondo == null)
+            {
+                fondo = RampaVolumen.CrearVoz(gameObject, GetComponent<AudioSource>(), "bordon", out rampaFondo);
+                fondo.clip = d.ClipFondo;
+            }
+
+            float maximo = d.Volumen.Value * (d.VolumenFondo != null ? d.VolumenFondo.Value : 0.6f);
+            float objetivo = activo ? maximo : 0f;
+            volFondo = Mathf.MoveTowards(volFondo, objetivo, Time.deltaTime * velocidadFondo * Mathf.Max(maximo, 0.01f));
+            rampaFondo.objetivo = volFondo;
+            if (volFondo > 0.0001f && !fondo.isPlaying)
+            {
+                fondo.Play();
+            }
+            else if (volFondo <= 0.0001f && objetivo <= 0f && rampaFondo.Actual <= 0.0001f && fondo.isPlaying)
+            {
+                fondo.Stop();
+            }
+
+            // La manivela gira mientras suena el bordon (arranca y frena suave con su volumen)
+            if (!buscadaManivela)
+            {
+                manivela = transform.Find("manivela");
+                buscadaManivela = true;
+            }
+            if (manivela != null && maximo > 0.0001f)
+            {
+                float ritmo = volFondo / maximo;
+                manivela.Rotate(Vector3.right, 360f * vueltasPorSegundo * ritmo * Time.deltaTime, Space.Self);
             }
         }
     }
