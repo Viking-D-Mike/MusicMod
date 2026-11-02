@@ -11,7 +11,7 @@ The plugin is a small C# class library (.NET Framework 4.7.2) for BepInEx 5.
 
 | File | What it does |
 |---|---|
-| `LaudMod/LaudPlugin.cs` | Plugin entry point: loads the asset bundle, registers the four instruments in the game's prefab list (fixed slots 20391-20394), puts them in their shops and registers the hook offsets for HooksHangMore (optional). |
+| `LaudMod/LaudPlugin.cs` | Plugin entry point: loads the asset bundle synchronously in Awake, registers the four instruments in the game's prefab list (fixed slots 20391-20394, through a Harmony prefix on `PrefabsDirectory.Start`), puts them in their shops and registers the hook offsets for HooksHangMore (optional). |
 | `LaudMod/Instrumento.cs` | Data and config entries of each instrument (keys, volume, positions, shop). |
 | `LaudMod/InstrumentoItem.cs` | Shared item logic (play mode with the activate key, hand/play positions) plus the nakers, the flute (held notes with crossfade and pitch glide, with a per-sample volume ramp to avoid clicks) and the hurdy-gurdy (flute logic plus a drone and a turning crank). |
 | `LaudMod/LaudItem.cs` | The lute item. |
@@ -21,7 +21,7 @@ Comments and identifiers are in Spanish.
 ### Building
 
 1. Open `LaudMod.slnx` in Visual Studio 2022 or later.
-2. Check the reference paths in `LaudMod/LaudMod.csproj`. They point to a default Steam install of Sailwind (`Sailwind_Data/Managed`) and to `BepInEx/core/BepInEx.dll` inside the game folder. Change them if your install is elsewhere.
+2. Check the reference paths in `LaudMod/LaudMod.csproj`. They point to a default Steam install of Sailwind (`Sailwind_Data/Managed`) and to `BepInEx/core/BepInEx.dll` and `BepInEx/core/0Harmony.dll` inside the game folder. Change them if your install is elsewhere.
 3. Build in **Release**. Copy `LaudMod.dll` together with the `laud_bundle` asset bundle (from the release zip) into `BepInEx/plugins/MusicMod/`.
 
 The Debug build exposes extra settings for development (positions, shop placement, an F10 key that logs coordinates, test prices). The Release build only exposes note keys, volume and the hurdy-gurdy drone volume.

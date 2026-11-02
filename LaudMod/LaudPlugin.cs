@@ -4,12 +4,14 @@ using System.IO;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
+using BepInEx.Logging;
+using HarmonyLib;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace LaudMod
 {
-    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.1.0")]
+    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.1.1")]
     public class LaudPlugin : BaseUnityPlugin
     {
         // Los tres instrumentos del mod
@@ -21,7 +23,8 @@ namespace LaudMod
         public static PropertyInfo PropPosicionColgado, PropGiroColgado;
 
         private ConfigEntry<KeyCode> teclaLocalizar;
-        private ConfigEntry<bool> todoA1;
+        private static ConfigEntry<bool> todoA1;
+        private static ManualLogSource Log;
         private float proximaRevisionPrecios;
 
         private const string islaInicio = "island 21 M (siren song)";
@@ -29,6 +32,7 @@ namespace LaudMod
 
         private void Awake()
         {
+            Log = Logger;
             Logger.LogInfo("MusicMod cargado correctamente: laud, flauta xiao, nacaires y zanfona");
 
             Laud = new Instrumento
@@ -125,7 +129,38 @@ namespace LaudMod
                 "Si esta activado, los instrumentos sin vender cuestan casi nada (para probarlos). Desactivalo para jugar normal");
 
             SceneManager.sceneLoaded += AlCargarEscena;
-            StartCoroutine(Preparar());
+
+            // El paquete se carga YA (no en segundo plano) y los instrumentos se meten en la lista de objetos
+            // del juego justo antes de que el juego la prepare (PrefabsDirectory.Start). Asi, cuando se carga
+            // una partida, los instrumentos guardados siempre existen: no se pierden aunque cargues muy deprisa
+            // ni aunque uses mods como Save Cleaner.
+            CargarPaquete();
+            foreach (Instrumento ins in Todos)
+            {
+                if (ins.Prefab != null)
+                {
+                    PrepararPrefab(ins);
+                }
+            }
+            Harmony.CreateAndPatchAll(typeof(ParcheDirectorio), "com.vikingdmike.musicmod");
+
+            // Por si el juego ya hubiera preparado su lista antes que nosotros (no deberia pasar)
+            if (PrefabsDirectory.instance != null)
+            {
+                InsertarTodos(PrefabsDirectory.instance);
+                AccessTools.Method(typeof(PrefabsDirectory), "PopulateShipItems").Invoke(PrefabsDirectory.instance, null);
+            }
+
+            StartCoroutine(Comprobar());
+        }
+
+        [HarmonyPatch(typeof(PrefabsDirectory), "Start")]
+        private static class ParcheDirectorio
+        {
+            private static void Prefix(PrefabsDirectory __instance)
+            {
+                InsertarTodos(__instance);
+            }
         }
 
         private void Update()
@@ -163,7 +198,7 @@ namespace LaudMod
             }
         }
 
-        private int Precio(Instrumento ins)
+        private static int Precio(Instrumento ins)
         {
             return todoA1.Value ? 2 : ins.Precio;
         }
@@ -234,23 +269,21 @@ namespace LaudMod
             }
         }
 
-        private IEnumerator Preparar()
+        private void CargarPaquete()
         {
             string carpeta = Path.GetDirectoryName(Info.Location);
             string ruta = Path.Combine(carpeta, "laud_bundle");
             if (!File.Exists(ruta))
             {
                 Logger.LogError("No encuentro laud_bundle en: " + ruta);
-                yield break;
+                return;
             }
 
-            AssetBundleCreateRequest peticion = AssetBundle.LoadFromFileAsync(ruta);
-            yield return peticion;
-            AssetBundle paquete = peticion.assetBundle;
+            AssetBundle paquete = AssetBundle.LoadFromFile(ruta);
             if (paquete == null)
             {
                 Logger.LogError("No he podido abrir laud_bundle");
-                yield break;
+                return;
             }
 
             // Cada instrumento carga su prefab y SOLO sus sonidos, por su nombre
@@ -294,19 +327,14 @@ namespace LaudMod
                     Logger.LogInfo(ins.Clave + ": sonido de fondo " + (ins.ClipFondo != null ? "cargado" : "NO encontrado (" + ins.SonidoFondo + ")"));
                 }
             }
+        }
 
+        // Despues de cargar: tiendas, ganchos de HooksHangMore y comprobar que ningun otro mod nos pisa
+        private IEnumerator Comprobar()
+        {
             while (PrefabsDirectory.instance == null)
             {
                 yield return new WaitForSeconds(1f);
-            }
-            yield return new WaitForSeconds(2f);
-
-            foreach (Instrumento ins in Todos)
-            {
-                if (ins.Prefab != null)
-                {
-                    Registrar(ins);
-                }
             }
             RegistrarColgado();
 
@@ -333,7 +361,8 @@ namespace LaudMod
             }
         }
 
-        private void Registrar(Instrumento ins)
+        // Se hace una sola vez: anade al prefab el sonido y el codigo del instrumento
+        private void PrepararPrefab(Instrumento ins)
         {
             GameObject prefab = ins.Prefab;
 
@@ -375,31 +404,42 @@ namespace LaudMod
             // sold se queda en falso: en una tienda el objeto empieza sin vender
 
             SaveablePrefab guardable = prefab.AddComponent<SaveablePrefab>();
+            guardable.prefabIndex = ins.Indice;
+        }
 
-            PrefabsDirectory directorio = PrefabsDirectory.instance;
+        // Mete los instrumentos en la lista de objetos del juego (se llama justo antes de PrefabsDirectory.Start)
+        private static void InsertarTodos(PrefabsDirectory directorio)
+        {
+            foreach (Instrumento ins in Todos)
+            {
+                if (ins.Prefab != null)
+                {
+                    Insertar(directorio, ins);
+                }
+            }
+        }
+
+        private static void Insertar(PrefabsDirectory directorio, Instrumento ins)
+        {
             int indice = ins.Indice;
 
             if (indice < directorio.directory.Length && directorio.directory[indice] != null)
             {
-                Logger.LogError("La posicion " + indice + " ya esta ocupada por otro objeto: no registro " + ins.Clave + " para no pisarlo");
+                if (directorio.directory[indice] != ins.Prefab)
+                {
+                    Log.LogError("La posicion " + indice + " ya esta ocupada por otro objeto: no registro " + ins.Clave + " para no pisarlo");
+                }
                 return;
             }
 
-            int largo = Mathf.Max(Mathf.Max(directorio.directory.Length, directorio.shipItems.Length), indice + 1);
-
+            int largo = Mathf.Max(directorio.directory.Length, indice + 1);
             GameObject[] listaNueva = new GameObject[largo];
             directorio.directory.CopyTo(listaNueva, 0);
-            listaNueva[indice] = prefab;
+            listaNueva[indice] = ins.Prefab;
             directorio.directory = listaNueva;
 
-            ShipItem[] itemsNuevos = new ShipItem[largo];
-            directorio.shipItems.CopyTo(itemsNuevos, 0);
-            itemsNuevos[indice] = item;
-            directorio.shipItems = itemsNuevos;
-
-            guardable.prefabIndex = indice;
             ins.Registrado = true;
-            Logger.LogInfo(ins.Clave + " registrado en la posicion " + indice);
+            Log.LogInfo(ins.Clave + " registrado en la posicion " + indice);
         }
 
         // Si el mod HooksHangMore esta instalado, le decimos como colgar cada instrumento (sin depender de el)
