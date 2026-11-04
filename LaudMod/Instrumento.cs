@@ -28,6 +28,8 @@ namespace LaudMod
         public string DefEscena, DefRaiz;
         public float[] DefTienda;     // X, Y, Z, giro, inclinacion
         public float[] DefColgado;    // X, Y, Z, giroX, giroY, giroZ
+        public float[] DefTocarViejo; // valores por defecto de una version anterior (null = ninguno)
+        public float[] DefManoViejo;  // si el jugador aun los tiene, se cambian por los nuevos
 
         // ---- Ajustes del .cfg ----
         public ConfigEntry<KeyCode>[] Teclas;
@@ -47,6 +49,17 @@ namespace LaudMod
         public GameObject Puesto;
         public Vector3 UltimaPos;
         public float UltimoGiro, UltimaInclinacion;
+
+        // true si los valores son iguales (con un margen pequeno)
+        private static bool Iguales(float[] a, float[] b)
+        {
+            if (a == null || b == null || a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (Mathf.Abs(a[i] - b[i]) > 0.001f) return false;
+            }
+            return true;
+        }
 
         private string Sec(string seccion)
         {
@@ -82,6 +95,19 @@ namespace LaudMod
             ReposoGiroX = c.Bind(Sec("Posicion en la mano"), "GiroX", DefMano[2], "Giro en grados al llevarlo en la mano, eje X");
             ReposoGiroY = c.Bind(Sec("Posicion en la mano"), "GiroY", DefMano[3], "Giro en grados al llevarlo en la mano, eje Y");
             ReposoGiroZ = c.Bind(Sec("Posicion en la mano"), "GiroZ", DefMano[4], "Giro en grados al llevarlo en la mano, eje Z");
+
+            // Si el jugador sigue con los valores de fabrica de una version anterior, se pasan a los nuevos.
+            // Si los cambio a su gusto, no se tocan.
+            if (Iguales(new[] { TocarDistancia.Value, TocarAltura.Value, TocarLateral.Value, TocarGiroX.Value, TocarGiroY.Value, TocarGiroZ.Value }, DefTocarViejo))
+            {
+                TocarDistancia.Value = DefTocar[0]; TocarAltura.Value = DefTocar[1]; TocarLateral.Value = DefTocar[2];
+                TocarGiroX.Value = DefTocar[3]; TocarGiroY.Value = DefTocar[4]; TocarGiroZ.Value = DefTocar[5];
+            }
+            if (Iguales(new[] { ManoDistancia.Value, ManoAltura.Value, ReposoGiroX.Value, ReposoGiroY.Value, ReposoGiroZ.Value }, DefManoViejo))
+            {
+                ManoDistancia.Value = DefMano[0]; ManoAltura.Value = DefMano[1];
+                ReposoGiroX.Value = DefMano[2]; ReposoGiroY.Value = DefMano[3]; ReposoGiroZ.Value = DefMano[4];
+            }
 
             TiendaEscena = c.Bind(Sec("Tienda"), "Escena", DefEscena, "Escena (isla) de la tienda. Se aplica al reiniciar el juego");
             TiendaRaiz = c.Bind(Sec("Tienda"), "Raiz", DefRaiz, "Objeto raiz de la isla donde se coloca. Se aplica al reiniciar el juego");

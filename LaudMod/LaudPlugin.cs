@@ -11,7 +11,7 @@ using UnityEngine.SceneManagement;
 
 namespace LaudMod
 {
-    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.1.1")]
+    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.1.2")]
     public class LaudPlugin : BaseUnityPlugin
     {
         // Los tres instrumentos del mod
@@ -62,8 +62,11 @@ namespace LaudMod
                 NombresNotas = new[] { "D", "E", "FSharp", "G", "A", "B", "CSharp", "HighD" },
                 TeclasDefecto = new[] { KeyCode.Alpha6, KeyCode.Alpha7, KeyCode.Alpha8, KeyCode.Alpha9, KeyCode.Alpha0,
                                         KeyCode.Y, KeyCode.U, KeyCode.I },
-                DefTocar = new[] { 0.3f, -0.1f, 0f, 270f, 90f, 90f },
-                DefMano = new[] { 0.45f, -0.2f, 180f, 0f, 0f },
+                DefTocar = new[] { 0.3f, -0.1f, 0f, 270f, 270f, 90f },
+                DefMano = new[] { 0.45f, -0.2f, 180f, 0f, 180f },
+                // 1.1.1 y anteriores: la flauta salia al reves (muesca lejos de la boca)
+                DefTocarViejo = new[] { 0.3f, -0.1f, 0f, 270f, 90f, 90f },
+                DefManoViejo = new[] { 0.45f, -0.2f, 180f, 0f, 0f },
                 DefEscena = "island 11 E (Crab Beach)", DefRaiz = "island 11 E (crab beach) scenery",
                 DefTienda = new[] { 384.554f, 12.714f, -216.758f, 0f, 90f },
                 DefColgado = new[] { 0f, -0.1f, -0.1f, 0f, 0f, 0f }
