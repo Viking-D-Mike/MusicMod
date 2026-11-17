@@ -31,9 +31,17 @@ namespace LaudMod
             botonLiberado = false;
         }
 
+        // Si es falso, la tecla de usar hace lo normal del juego (por ejemplo girar el objeto en la mano)
+        protected virtual bool UsaTeclaUsar { get { return true; } }
+
         // El juego llama a esto en cada fotograma mientras mantienes la tecla de usar
         public override void OnAltHeld()
         {
+            if (!UsaTeclaUsar)
+            {
+                base.OnAltHeld();
+                return;
+            }
             pulsadoEsteFotograma = true;
         }
 
@@ -153,7 +161,45 @@ namespace LaudMod
             {
                 fuerza = Random.Range(0.8f, 1f);
             }
+            if (d.Desvios != null)
+            {
+                // Cada nota por su propia "voz", para poder cambiarle el tono sin tocar las que siguen sonando
+                AudioSource voz = VozLibre();
+                float semitonos = nota < d.Desvios.Length ? d.Desvios[nota] : 0f;
+                voz.pitch = Mathf.Pow(2f, semitonos / 12f);
+                voz.PlayOneShot(clip, d.Volumen.Value * fuerza);
+                return;
+            }
             fuente.PlayOneShot(clip, d.Volumen.Value * fuerza);
+        }
+
+        private AudioSource[] voces;
+        private int siguienteVoz;
+
+        // Varias fuentes de sonido que se turnan (para el piano)
+        private AudioSource VozLibre()
+        {
+            if (voces == null || voces[0] == null)
+            {
+                voces = new AudioSource[16];
+                for (int i = 0; i < voces.Length; i++)
+                {
+                    GameObject go = new GameObject("voz piano " + i);
+                    go.transform.SetParent(transform, false);
+                    AudioSource s = go.AddComponent<AudioSource>();
+                    s.playOnAwake = false;
+                    s.loop = false;
+                    s.spatialBlend = fuente.spatialBlend;
+                    s.rolloffMode = fuente.rolloffMode;
+                    s.minDistance = fuente.minDistance;
+                    s.maxDistance = fuente.maxDistance;
+                    s.outputAudioMixerGroup = fuente.outputAudioMixerGroup;
+                    voces[i] = s;
+                }
+            }
+            AudioSource v = voces[siguienteVoz];
+            siguienteVoz = (siguienteVoz + 1) % voces.Length;
+            return v;
         }
     }
 
@@ -161,6 +207,20 @@ namespace LaudMod
     public class NacairesItem : InstrumentoItem
     {
         public override Instrumento Datos { get { return LaudPlugin.Nacaires; } }
+    }
+
+    // La kalimba: como el laud, cada pulsacion suena una vez
+    [DefaultExecutionOrder(1000)]
+    public class KalimbaItem : InstrumentoItem
+    {
+        public override Instrumento Datos { get { return LaudPlugin.Kalimba; } }
+    }
+
+    // El shamisen: como el laud, cada pulsacion suena una vez
+    [DefaultExecutionOrder(1000)]
+    public class ShamisenItem : InstrumentoItem
+    {
+        public override Instrumento Datos { get { return LaudPlugin.Shamisen; } }
     }
 
     // Aplica el volumen muestra a muestra en el hilo de audio, interpolando entre el valor
@@ -406,6 +466,82 @@ namespace LaudMod
                     fuentes[i].pitch = 1f;
                 }
             }
+        }
+    }
+
+    // El violin: las notas funcionan como la flauta (suenan mientras mantienes la tecla).
+    // El arco va y viene: cada nota nueva cambia de sentido, va mas deprisa si tocas rapido
+    // y avanza despacio mientras mantienes la nota. Si llega al final, se da la vuelta.
+    [DefaultExecutionOrder(1000)]
+    public class ViolinItem : FlautaItem
+    {
+        private Transform arco;
+        private bool buscadoArco;
+        private Vector3 arcoPos0, arcoEje;
+        private float arcoMedio;      // cuanto puede ir hacia cada lado
+        private float arcoSitio;      // -1 .. 1
+        private float sentido = 1f;
+        private float rapidez = 0.5f; // recorridos por segundo
+        private float ultimaNota = -10f;
+
+        public override Instrumento Datos { get { return LaudPlugin.Violin; } }
+
+        protected override void LeerTeclas(bool activo)
+        {
+            base.LeerTeclas(activo);
+            if (!buscadoArco)
+            {
+                buscadoArco = true;
+                arco = transform.Find("arco");
+                if (arco != null)
+                {
+                    MeshFilter mf = arco.GetComponent<MeshFilter>();
+                    Vector3 e = (mf != null && mf.sharedMesh != null) ? mf.sharedMesh.bounds.extents : Vector3.one * 0.3f;
+                    Vector3 eje = (e.x >= e.y && e.x >= e.z) ? Vector3.right : (e.y >= e.z ? Vector3.up : Vector3.forward);
+                    float largo = Mathf.Max(e.x, Mathf.Max(e.y, e.z));
+                    arcoPos0 = arco.localPosition;
+                    arcoEje = arco.localRotation * Vector3.Scale(eje, arco.localScale);
+                    arcoMedio = largo * 0.6f;
+                }
+                Debug.Log("VIOLIN: arco encontrado " + (arco != null) + ", recorrido " + arcoMedio.ToString("F3"));
+            }
+            if (arco == null) return;
+
+            Instrumento d = Datos;
+            bool alguna = false;
+            bool nueva = false;
+            if (activo)
+            {
+                for (int i = 0; i < d.Teclas.Length; i++)
+                {
+                    if (d.Teclas[i] == null) continue;
+                    if (Input.GetKeyDown(d.Teclas[i].Value)) nueva = true;
+                    if (Input.GetKey(d.Teclas[i].Value)) alguna = true;
+                }
+            }
+
+            if (nueva)
+            {
+                float hueco = Time.time - ultimaNota;
+                ultimaNota = Time.time;
+                sentido = -sentido;
+                // Notas seguidas y rapidas: el arco va deprisa. Notas largas: va despacio
+                rapidez = Mathf.Clamp(0.9f / Mathf.Max(hueco, 0.05f), 0.35f, 3f);
+            }
+
+            if (alguna)
+            {
+                arcoSitio += sentido * rapidez * 2f * Time.deltaTime;
+                if (arcoSitio > 1f) { arcoSitio = 1f; sentido = -1f; }
+                if (arcoSitio < -1f) { arcoSitio = -1f; sentido = 1f; }
+                // Mientras se mantiene, va frenando poco a poco hasta un paso lento
+                rapidez = Mathf.MoveTowards(rapidez, 0.35f, Time.deltaTime * 0.8f);
+            }
+            else if (!activo)
+            {
+                arcoSitio = Mathf.MoveTowards(arcoSitio, 0f, Time.deltaTime * 2f);
+            }
+            arco.localPosition = arcoPos0 + arcoEje.normalized * (arcoSitio * arcoMedio);
         }
     }
 

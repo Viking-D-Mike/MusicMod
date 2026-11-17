@@ -71,6 +71,7 @@
   <ItemGroup>
     <Compile Include="LaudPlugin.cs" />
     <Compile Include="LaudItem.cs" />
+    <Compile Include="PianoItem.cs" />
     <Compile Include="Instrumento.cs" />
     <Compile Include="InstrumentoItem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

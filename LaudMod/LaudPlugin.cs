@@ -11,12 +11,16 @@ using UnityEngine.SceneManagement;
 
 namespace LaudMod
 {
-    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.1.2")]
+    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.2.0")]
     public class LaudPlugin : BaseUnityPlugin
     {
         // Los tres instrumentos del mod
-        public static Instrumento Laud, Flauta, Nacaires, Zanfona;
+        public static Instrumento Laud, Flauta, Nacaires, Zanfona, Piano, Kalimba, Violin, Shamisen;
         public static Instrumento[] Todos = new Instrumento[0];
+
+        // Piano: tecla para abrir/cerrar la tapa que miras y angulos de apertura
+        public static ConfigEntry<KeyCode> PianoTeclaAbrir, PianoTeclaTocar;
+        public static ConfigEntry<float> PianoAnguloGrande, PianoAnguloTeclas;
 
         // Piezas de HooksHangMore (si esta instalado) para cambiar la posicion de colgado en vivo
         public static Type TipoAttachable;
@@ -38,7 +42,7 @@ namespace LaudMod
             Laud = new Instrumento
             {
                 Clave = "laud", NombrePrefab = "laud", NombreObjeto = "lute", Prefijo = "Lute - ",
-                Indice = 20391, Precio = 150, Masa = 2f, AlturaMueble = 0.15f, Sostenido = false,
+                Indice = 20391, Precio = 450, Masa = 2f, AlturaMueble = 0.15f, Sostenido = false,
                 Sonidos = new[] { "nota1_do", "nota2_re", "nota3_mi", "nota_fa", "nota4_sol", "nota5_la", "nota_si", "nota_do_alto" },
                 SonidosSuaves = new[] { "nota1_do_suave", "nota2_re_suave", "nota3_mi_suave", "nota_fa_suave", "nota4_sol_suave",
                                         "nota5_la_suave", "nota_si_suave", "nota_do_alto_suave" },
@@ -56,7 +60,7 @@ namespace LaudMod
             Flauta = new Instrumento
             {
                 Clave = "flauta", NombrePrefab = "flauta", NombreObjeto = "xiao flute", Prefijo = "Flute - ",
-                Indice = 20392, Precio = 80, Masa = 0.5f, AlturaMueble = 0.05f, Sostenido = true,
+                Indice = 20392, Precio = 240, Masa = 0.5f, AlturaMueble = 0.05f, Sostenido = true,
                 Sonidos = new[] { "flauta_nota1_re", "flauta_nota2_mi", "flauta_nota3_fa_sost", "flauta_nota4_sol",
                                   "flauta_nota5_la", "flauta_nota6_si", "flauta_nota7_do_sost", "flauta_nota8_re_alto" },
                 NombresNotas = new[] { "D", "E", "FSharp", "G", "A", "B", "CSharp", "HighD" },
@@ -75,7 +79,7 @@ namespace LaudMod
             Nacaires = new Instrumento
             {
                 Clave = "nacaires", NombrePrefab = "nacaires", NombreObjeto = "nakers", Prefijo = "Nakers - ",
-                Indice = 20393, Precio = 120, Masa = 3f, AlturaMueble = 0.12f, Sostenido = false,
+                Indice = 20393, Precio = 360, Masa = 3f, AlturaMueble = 0.12f, Sostenido = false,
                 Sonidos = new[] { "nacaires_golpe1_grande_centro", "nacaires_golpe2_grande_borde",
                                   "nacaires_golpe3_pequeno_centro", "nacaires_golpe4_pequeno_borde" },
                 NombresNotas = new[] { "BigCenter", "BigEdge", "SmallCenter", "SmallEdge" },
@@ -104,7 +108,7 @@ namespace LaudMod
             Zanfona = new Instrumento
             {
                 Clave = "zanfona", NombrePrefab = "zanfona", NombreObjeto = "hurdy gurdy", Prefijo = "Hurdy Gurdy - ",
-                Indice = 20394, Precio = 200, Masa = 3f, AlturaMueble = 0.12f, Sostenido = true, Colgable = false,
+                Indice = 20394, Precio = 600, Masa = 3f, AlturaMueble = 0.12f, Sostenido = true, Colgable = false,
                 Sonidos = new[] { "zanfona_nota01_mi", "zanfona_nota02_fa_sost", "zanfona_nota03_sol_sost", "zanfona_nota04_la",
                                   "zanfona_nota05_si", "zanfona_nota06_do_sost", "zanfona_nota07_re_sost", "zanfona_nota08_mi",
                                   "zanfona_nota09_fa_sost", "zanfona_nota10_sol_sost" },
@@ -119,11 +123,91 @@ namespace LaudMod
                 DefColgado = new[] { 0f, 0f, 0f, 0f, 0f, 0f }
             };
 
-            Todos = new[] { Laud, Flauta, Nacaires, Zanfona };
+            // El piano se vende en Happy Bay (por dentro la isla se llama "Oasis"). Se toca colocado: mirandolo y pulsando R
+            Piano = new Instrumento
+            {
+                Clave = "piano", NombrePrefab = "piano", NombreObjeto = "square piano", Prefijo = "Piano - ",
+                Indice = 20396, Precio = 8750, Masa = 40f, AlturaMueble = 0f, Sostenido = false, Colgable = false,
+                // Una octava completa: las teclas negras usan la nota blanca de al lado subida medio tono
+                Sonidos = new[] { "piano_nota1_do", "piano_nota1_do", "piano_nota2_re", "piano_nota2_re", "piano_nota3_mi",
+                                  "piano_nota4_fa", "piano_nota4_fa", "piano_nota5_sol", "piano_nota5_sol",
+                                  "piano_nota6_la", "piano_nota6_la", "piano_nota7_si", "piano_nota8_do_alto" },
+                Desvios = new[] { 0f, 1f, 0f, 1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f, 0f, 0f },
+                // Sin version suave: con el teclado no se sabe la fuerza de la pulsacion, asi que suena siempre igual
+                NombresNotas = new[] { "LowC", "CSharp", "D", "DSharp", "E", "F", "FSharp", "G", "GSharp", "A", "ASharp", "B", "HighC" },
+                // Blancas en la fila de abajo (C V B N M , . -) y negras en la del medio (G H J K L)
+                TeclasDefecto = new[] { KeyCode.C, KeyCode.G, KeyCode.V, KeyCode.H, KeyCode.B, KeyCode.N, KeyCode.J,
+                                        KeyCode.M, KeyCode.K, KeyCode.Comma, KeyCode.L, KeyCode.Period, KeyCode.Minus },
+                DefTocar = new[] { 1.2f, -0.9f, 0f, 0f, 180f, 0f },
+                DefMano = new[] { 1.5f, -0.9f, 0f, 180f, 0f },
+                DefEscena = "island 18 M (Oasis)", DefRaiz = "island 18 M (Oasis) scenery",
+                DefTienda = new[] { -100.395f, 8.65f, 46.95f, 228f, 0f }
+            };
+
+            // La kalimba se vende en Al'Ankh, en la mesa de las tiendas de Al'Nilem.
+            // Cada lamina suena una vez y se apaga sola, como el laud.
+            Kalimba = new Instrumento
+            {
+                Clave = "kalimba", NombrePrefab = "kalimba", NombreObjeto = "kalimba", Prefijo = "Kalimba - ",
+                Indice = 20395, Precio = 360, Masa = 0.8f, AlturaMueble = 0.03f, Sostenido = false, Colgable = false,
+                Sonidos = new[] { "kalimba_nota01_do", "kalimba_nota02_re", "kalimba_nota03_mi", "kalimba_nota04_fa", "kalimba_nota05_sol",
+                                  "kalimba_nota06_la", "kalimba_nota07_si", "kalimba_nota08_do_alto", "kalimba_nota09_re_alto", "kalimba_nota10_mi_alto" },
+                NombresNotas = new[] { "C", "D", "E", "F", "G", "A", "B", "HighC", "HighD", "HighE" },
+                TeclasDefecto = new[] { KeyCode.Alpha6, KeyCode.Alpha7, KeyCode.Alpha8, KeyCode.Alpha9, KeyCode.Alpha0,
+                                        KeyCode.Y, KeyCode.U, KeyCode.I, KeyCode.O, KeyCode.P },
+                DefTocar = new[] { 0.4f, -0.15f, 0f, 30f, 180f, 0f },
+                DefMano = new[] { 0.45f, -0.15f, 30f, 180f, 0f },
+                DefEscena = "island 2 A AlNilem", DefRaiz = "island 2 A (alnilem) scenery",
+                DefTienda = new[] { 267.963f, 13.485f, 56.3f, 0f, 0f },
+                DefColgado = new[] { 0f, -0.1f, -0.1f, 0f, 0f, 0f }
+            };
+
+            // El violin: suena mientras mantienes la tecla, como la flauta, y el arco va y viene.
+            // Se vende en Chronos (el viaje mas largo del juego), en una mesa
+            Violin = new Instrumento
+            {
+                Clave = "violin", NombrePrefab = "violin", NombreObjeto = "violin", Prefijo = "Violin - ",
+                Indice = 20397, Precio = 3000, Masa = 1f, AlturaMueble = 0.06f, Sostenido = true,
+                Sonidos = new[] { "violin_nota1_la", "violin_nota2_si", "violin_nota3_do_sost", "violin_nota4_re",
+                                  "violin_nota5_mi", "violin_nota6_fa_sost", "violin_nota7_sol_sost", "violin_nota8_la_alto" },
+                NombresNotas = new[] { "A", "B", "CSharp", "D", "E", "FSharp", "GSharp", "HighA" },
+                TeclasDefecto = new[] { KeyCode.Alpha6, KeyCode.Alpha7, KeyCode.Alpha8, KeyCode.Alpha9, KeyCode.Alpha0,
+                                        KeyCode.Y, KeyCode.U, KeyCode.I },
+                DefTocar = new[] { 0.3f, -0.2f, -0.1f, 10f, 160f, 15f },
+                DefMano = new[] { 0.5f, -0.2f, 0f, 180f, 0f },
+                DefEscena = "island 25 (chronos)", DefRaiz = "island 25 (chronos) scenery",
+                DefTienda = new[] { 545.192f, 8.40f, 451.623f, 45f, 4f },
+                DefColgado = new[] { 0f, -0.28f, -0.1f, 90f, 270f, 90f }
+            };
+
+            // El shamisen: como el laud, cada pulsacion suena una vez. Escala japonesa "in".
+            // Se vende en Kicia Bay (Fire Fish Lagoon), junto a la mesa de las maquetas de barcos
+            Shamisen = new Instrumento
+            {
+                Clave = "shamisen", NombrePrefab = "shamisen", NombreObjeto = "shamisen", Prefijo = "Shamisen - ",
+                Indice = 20398, Precio = 3840, Masa = 1.5f, AlturaMueble = 0.06f, Sostenido = false,
+                Sonidos = new[] { "shamisen_nota1_sol", "shamisen_nota2_lab", "shamisen_nota3_do", "shamisen_nota4_reb",
+                                  "shamisen_nota5_fa", "shamisen_nota6_sol", "shamisen_nota7_lab", "shamisen_nota8_do_alto" },
+                NombresNotas = new[] { "LowG", "LowAb", "C", "Db", "F", "G", "Ab", "HighC" },
+                TeclasDefecto = new[] { KeyCode.Alpha6, KeyCode.Alpha7, KeyCode.Alpha8, KeyCode.Alpha9, KeyCode.Alpha0,
+                                        KeyCode.Y, KeyCode.U, KeyCode.I },
+                DefTocar = new[] { 0.34f, -0.4f, 0f, -25f, 10f, 15f },
+                DefMano = new[] { 0.5f, -0.3f, 0f, 180f, 0f },
+                DefEscena = "island 27 Lagoon SwampShipyard", DefRaiz = "island scenery Lagoon Shipyard",
+                DefTienda = new[] { 3.9f, 5.44f, 34.322f, 90f, -15f },
+                DefColgado = new[] { 0f, -0.3f, -0.08f, 0f, 180f, 0f }
+            };
+
+            Todos = new[] { Laud, Flauta, Nacaires, Zanfona, Piano, Kalimba, Violin, Shamisen };
             foreach (Instrumento ins in Todos)
             {
                 ins.Atar(Config, interno);
             }
+
+            PianoTeclaAbrir = Config.Bind("Piano - Keys", "OpenLid", KeyCode.T, "Key to open or close the piano lid you are looking at");
+            PianoTeclaTocar = Config.Bind("Piano - Keys", "Play", KeyCode.R, "Key to start or stop playing the piano you are looking at (it must be placed, not in your hands)");
+            PianoAnguloGrande = interno.Bind("Piano - Tapas", "AnguloTapaGrande", -45f, "Grados que se abre la tapa grande (si gira hacia el lado contrario, cambia el signo)");
+            PianoAnguloTeclas = interno.Bind("Piano - Tapas", "AnguloTapaTeclas", -100f, "Grados que se abre la tapa de las teclas (si gira hacia el lado contrario, cambia el signo)");
 
             teclaLocalizar = interno.Bind("Pruebas", "TeclaLocalizar", localizarDefecto,
                 "Al pulsarla escribe en el log la isla, la raiz y la posicion del punto al que miras (para colocar tiendas). None = desactivada");
@@ -146,6 +230,7 @@ namespace LaudMod
                 }
             }
             Harmony.CreateAndPatchAll(typeof(ParcheDirectorio), "com.vikingdmike.musicmod");
+            ProtegerTiendasDeBarcos();
 
             // Por si el juego ya hubiera preparado su lista antes que nosotros (no deberia pasar)
             if (PrefabsDirectory.instance != null)
@@ -157,6 +242,56 @@ namespace LaudMod
             StartCoroutine(Comprobar());
         }
 
+        // Un instrumento que aun esta en la tienda (sin comprar) no debe "subirse" a un barco
+        // amarrado cerca: si el juego lo mete en el barco, lo recoloca mal (debajo de la mesa, etc.)
+        private void ProtegerTiendasDeBarcos()
+        {
+            Harmony h = new Harmony("com.vikingdmike.musicmod.tiendas");
+            MethodInfo prefijo = typeof(LaudPlugin).GetMethod("NoSubirSiEnTienda", BindingFlags.Static | BindingFlags.NonPublic);
+            int n = 0;
+            foreach (Type t in typeof(ShipItem).Assembly.GetTypes())
+            {
+                foreach (MethodInfo m in t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                {
+                    if (m.Name != "EnterBoat" || m.IsAbstract || m.ContainsGenericParameters) continue;
+                    try
+                    {
+                        h.Patch(m, prefix: new HarmonyMethod(prefijo));
+                        n++;
+                        Logger.LogInfo("TIENDA: protegido " + t.Name + ".EnterBoat");
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.LogWarning("TIENDA: no he podido proteger " + t.Name + ".EnterBoat: " + e.Message);
+                    }
+                }
+            }
+            if (n == 0) Logger.LogWarning("TIENDA: no he encontrado EnterBoat en el juego");
+        }
+
+        private static bool NoSubirSiEnTienda(object __instance)
+        {
+            InstrumentoItem item = __instance as InstrumentoItem;
+            if (item == null)
+            {
+                Component c = __instance as Component;
+                if (c != null) item = c.GetComponent<InstrumentoItem>();
+                // Puede que el juego llame a EnterBoat en el cuerpo fisico, que es un objeto aparte
+                if (item == null && c != null && c.name.EndsWith(":ItemRigidbody"))
+                {
+                    foreach (InstrumentoItem i in FindObjectsOfType<InstrumentoItem>())
+                    {
+                        if (i.itemRigidbodyC != null && i.itemRigidbodyC.gameObject == c.gameObject) { item = i; break; }
+                    }
+                }
+            }
+            if (item != null && !item.sold && item.held == null)
+            {
+                return false;   // sigue en la tienda: no lo metemos en el barco
+            }
+            return true;
+        }
+
         [HarmonyPatch(typeof(PrefabsDirectory), "Start")]
         private static class ParcheDirectorio
         {
@@ -164,6 +299,25 @@ namespace LaudMod
             {
                 InsertarTodos(__instance);
             }
+        }
+
+        // Blender guarda los colores "en lineal", pero Unity los lee como si fueran el color que se ve (sRGB),
+        // así que salen oscurecidos dos veces (la madera se ve gris). Los devolvemos al color de Blender
+        // y quitamos el "metálico", que en el juego refleja el cielo y apaga los colores.
+        private static readonly System.Collections.Generic.HashSet<Material> coloresArreglados = new System.Collections.Generic.HashSet<Material>();
+        private static void AjustarColores(GameObject go)
+        {
+            foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))
+                foreach (Material m in r.sharedMaterials)
+                {
+                    if (m == null || !coloresArreglados.Add(m)) continue;
+                    if (m.HasProperty("_Color"))
+                    {
+                        Color c = m.color;
+                        m.color = new Color(Mathf.LinearToGammaSpace(c.r), Mathf.LinearToGammaSpace(c.g), Mathf.LinearToGammaSpace(c.b), c.a);
+                    }
+                    if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0f);
+                }
         }
 
         private void Update()
@@ -182,6 +336,12 @@ namespace LaudMod
                     if (!item.sold && item.Datos != null)
                     {
                         item.value = Precio(item.Datos);
+                        // Si un instrumento de la tienda se ha hundido o movido de su sitio, lo devolvemos
+                        if (item.held == null && item.Datos.Puesto != null)
+                        {
+                            float d = Vector3.Distance(item.transform.position, item.Datos.Puesto.transform.position);
+                            if (d > 0.05f && d < 3f) ColocarEnPuesto(item, item.Datos);
+                        }
                     }
                 }
                 foreach (Instrumento ins in Todos)
@@ -206,6 +366,25 @@ namespace LaudMod
             return todoA1.Value ? 2 : ins.Precio;
         }
 
+        // Pone un instrumento de tienda (sin vender) exactamente en su puesto, con su física,
+        // por si al aparecer se ha hundido o desplazado
+        private static void ColocarEnPuesto(InstrumentoItem item, Instrumento ins)
+        {
+            Transform p = ins.Puesto.transform;
+            Rigidbody rb = item.itemRigidbodyC != null ? item.itemRigidbodyC.GetComponent<Rigidbody>() : null;
+            Matrix4x4 aFisica = rb != null ? rb.transform.localToWorldMatrix * item.transform.worldToLocalMatrix : Matrix4x4.identity;
+            item.transform.position = p.position;
+            item.transform.rotation = p.rotation;
+            if (rb != null)
+            {
+                Vector3 pos = aFisica.MultiplyPoint3x4(p.position);
+                rb.velocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.position = pos;
+                rb.transform.position = pos;
+            }
+        }
+
         private void MoverPuesto(Instrumento ins)
         {
             if (ins.Puesto == null)
@@ -226,10 +405,9 @@ namespace LaudMod
 
             foreach (InstrumentoItem item in FindObjectsOfType<InstrumentoItem>())
             {
-                if (item.Datos == ins && !item.sold && item.held == null && (item.transform.position - antes).sqrMagnitude < 4f)
+                if (item.Datos == ins && !item.sold && item.held == null && (item.transform.position - antes).sqrMagnitude < 9f)
                 {
-                    item.transform.position += desplazamiento;
-                    item.transform.rotation = ins.Puesto.transform.rotation;
+                    ColocarEnPuesto(item, ins);
                 }
             }
 
@@ -253,11 +431,26 @@ namespace LaudMod
                 Vector3 local = raiz.InverseTransformPoint(golpe.point);
                 Logger.LogInfo("LOCALIZAR: escena '" + raiz.gameObject.scene.name + "', raiz '" + raiz.name +
                     "', objeto '" + golpe.transform.name + "', punto respecto a la raiz (" +
-                    local.x.ToString("F3") + ", " + local.y.ToString("F3") + ", " + local.z.ToString("F3") + ")");
+                    local.x.ToString("F3") + ", " + local.y.ToString("F3") + ", " + local.z.ToString("F3") + "), Y del mundo " +
+                    golpe.point.y.ToString("F3") + ", escala de la raiz " + raiz.lossyScale.ToString("F2"));
             }
             else
             {
                 Logger.LogInfo("LOCALIZAR: no estas mirando a nada cercano");
+            }
+            // Datos de los instrumentos de tienda cercanos: dónde está cada uno respecto a su puesto y hasta dónde llega su dibujo
+            foreach (InstrumentoItem it in FindObjectsOfType<InstrumentoItem>())
+            {
+                if (it.sold || it.Datos == null || it.Datos.Puesto == null) continue;
+                if (Vector3.Distance(it.transform.position, camara.transform.position) > 15f) continue;
+                Bounds b = new Bounds(it.transform.position, Vector3.zero);
+                foreach (Renderer r in it.GetComponentsInChildren<Renderer>()) b.Encapsulate(r.bounds);
+                Rigidbody rb = it.itemRigidbodyC != null ? it.itemRigidbodyC.GetComponent<Rigidbody>() : null;
+                Logger.LogInfo("LOCALIZAR: " + it.Datos.Clave + " en Y " + it.transform.position.y.ToString("F3") +
+                    ", puesto en Y " + it.Datos.Puesto.transform.position.y.ToString("F3") +
+                    ", su dibujo va de Y " + b.min.y.ToString("F3") + " a " + b.max.y.ToString("F3") +
+                    ", fisica en Y " + (rb != null ? rb.position.y.ToString("F3") : "-") + (rb != null && rb.isKinematic ? " (quieta)" : " (libre)") +
+                    ", padre '" + (it.transform.parent != null ? it.transform.parent.name : "-") + "'");
             }
         }
 
@@ -298,6 +491,7 @@ namespace LaudMod
                     Logger.LogError("No encuentro el prefab '" + ins.NombrePrefab + "' dentro del paquete");
                     continue;
                 }
+                AjustarColores(ins.Prefab);
                 ins.Clips = new AudioClip[ins.Sonidos.Length];
                 int encontrados = 0;
                 for (int i = 0; i < ins.Sonidos.Length; i++)
@@ -390,6 +584,23 @@ namespace LaudMod
             {
                 item = prefab.AddComponent<ZanfonaItem>();
             }
+            else if (ins == Violin)
+            {
+                item = prefab.AddComponent<ViolinItem>();
+            }
+            else if (ins == Kalimba)
+            {
+                item = prefab.AddComponent<KalimbaItem>();
+            }
+            else if (ins == Shamisen)
+            {
+                item = prefab.AddComponent<ShamisenItem>();
+            }
+            else if (ins == Piano)
+            {
+                item = prefab.AddComponent<PianoItem>();
+                prefab.AddComponent<PianoTapas>();
+            }
             else
             {
                 item = prefab.AddComponent<LaudItem>();
@@ -403,7 +614,7 @@ namespace LaudMod
             item.inventoryScale = 1f;
             item.floaterHeight = 1.6f;
             item.allowPlacingItems = true;
-            item.big = false;
+            item.big = ins == Piano; // el piano es un mueble grande: se puede clavar al suelo con el martillo
             // sold se queda en falso: en una tienda el objeto empieza sin vender
 
             SaveablePrefab guardable = prefab.AddComponent<SaveablePrefab>();

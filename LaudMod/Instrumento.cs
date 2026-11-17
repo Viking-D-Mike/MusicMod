@@ -19,6 +19,7 @@ namespace LaudMod
         public bool Colgable = true;  // false = no se puede colgar en los ganchos (nacaires)
         public string[] Sonidos;      // nombres de los sonidos dentro del paquete, en orden de tecla
         public string[] SonidosSuaves; // version suave de cada nota (punteo flojo); null = no hay
+        public float[] Desvios;        // semitonos que se sube cada nota al sonar (las teclas negras del piano); null = ninguno
         public string SonidoFondo;    // sonido que suena de fondo mientras tocas (bordon de la zanfona); null = ninguno
         public string[] NombresNotas; // como aparecen en el .cfg
         public KeyCode[] TeclasDefecto;
@@ -61,6 +62,24 @@ namespace LaudMod
             return true;
         }
 
+        // "CSharp" -> "C# (Do#)", "HighC" -> "High C (Do alto)". Los golpes de los nacaires se quedan igual
+        private static string NombreBonito(string nota)
+        {
+            string resto = nota;
+            bool alto = false;
+            if (resto.StartsWith("High")) { alto = true; resto = resto.Substring(4); }
+            else if (resto.StartsWith("Low")) { resto = resto.Substring(3); }
+            bool sost = resto.EndsWith("Sharp");
+            if (sost) resto = resto.Substring(0, resto.Length - 5);
+            string[] letras = { "C", "D", "E", "F", "G", "A", "B" };
+            string[] solfeo = { "Do", "Re", "Mi", "Fa", "Sol", "La", "Si" };
+            int k = System.Array.IndexOf(letras, resto);
+            if (k < 0) return nota;
+            string ingles = (alto ? "High " : "") + letras[k] + (sost ? "#" : "");
+            string espanol = solfeo[k] + (sost ? "#" : "") + (alto ? " alto" : "");
+            return ingles + " (" + espanol + ")";
+        }
+
         private string Sec(string seccion)
         {
             return Prefijo + seccion;
@@ -73,8 +92,15 @@ namespace LaudMod
             Teclas = new ConfigEntry<KeyCode>[Sonidos.Length];
             for (int i = 0; i < Sonidos.Length; i++)
             {
+                // En el menu F1 se ve un titulo mas claro (con el nombre de la nota en ingles y en espanol),
+                // pero en el archivo el ajuste se sigue llamando igual, asi nadie pierde sus teclas
+                ConfigurationManagerAttributes titulo = new ConfigurationManagerAttributes
+                {
+                    DispName = "Note " + (i + 1) + ": " + NombreBonito(NombresNotas[i]),
+                    Order = 100 - i
+                };
                 Teclas[i] = publico.Bind(Sec("Keys"), "Note" + (i + 1) + "_" + NombresNotas[i], TeclasDefecto[i],
-                    "Key for note " + (i + 1) + " (" + NombresNotas[i] + "). Examples: Alpha6, Y, Z, Keypad1, F5");
+                    new ConfigDescription("Key for note " + (i + 1) + " (" + NombresNotas[i] + "). Examples: Alpha6, Y, Z, Keypad1, F5", null, titulo));
             }
             Volumen = publico.Bind(Sec("Sound"), "Volume", 1f, "Volume (0 to 1)");
             if (SonidoFondo != null)
@@ -128,5 +154,12 @@ namespace LaudMod
             ColgRotY = c.Bind(Sec("Colgar en gancho"), "GiroY", DefColgado[4], "Giro en grados, eje Y");
             ColgRotZ = c.Bind(Sec("Colgar en gancho"), "GiroZ", DefColgado[5], "Giro en grados, eje Z");
         }
+    }
+
+    // El menu F1 (ConfigurationManager) busca una clase con este nombre para saber como mostrar cada ajuste
+    internal sealed class ConfigurationManagerAttributes
+    {
+        public string DispName;
+        public int? Order;
     }
 }
