@@ -11,7 +11,7 @@ using UnityEngine.SceneManagement;
 
 namespace LaudMod
 {
-    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.2.0")]
+    [BepInPlugin("com.vikingdmike.musicmod", "MusicMod", "1.3.0")]
     public class LaudPlugin : BaseUnityPlugin
     {
         // Los tres instrumentos del mod
@@ -20,6 +20,7 @@ namespace LaudMod
 
         // Piano: tecla para abrir/cerrar la tapa que miras y angulos de apertura
         public static ConfigEntry<KeyCode> PianoTeclaAbrir, PianoTeclaTocar;
+        public static ConfigEntry<KeyCode> TeclaOctavaArriba, TeclaOctavaAbajo;
         public static ConfigEntry<float> PianoAnguloGrande, PianoAnguloTeclas;
 
         // Piezas de HooksHangMore (si esta instalado) para cambiar la posicion de colgado en vivo
@@ -204,6 +205,9 @@ namespace LaudMod
                 ins.Atar(Config, interno);
             }
 
+            // Cambio de octava (todos los instrumentos): manteniendo estas teclas, las notas suenan una octava mas aguda o mas grave
+            TeclaOctavaArriba = Config.Bind("General - Octave", "OctaveUp", KeyCode.LeftShift, "Hold it while playing: the notes sound one octave higher (None = off)");
+            TeclaOctavaAbajo = Config.Bind("General - Octave", "OctaveDown", KeyCode.LeftAlt, "Hold it while playing: the notes sound one octave lower (None = off)");
             PianoTeclaAbrir = Config.Bind("Piano - Keys", "OpenLid", KeyCode.T, "Key to open or close the piano lid you are looking at");
             PianoTeclaTocar = Config.Bind("Piano - Keys", "Play", KeyCode.R, "Key to start or stop playing the piano you are looking at (it must be placed, not in your hands)");
             PianoAnguloGrande = interno.Bind("Piano - Tapas", "AnguloTapaGrande", -45f, "Grados que se abre la tapa grande (si gira hacia el lado contrario, cambia el signo)");

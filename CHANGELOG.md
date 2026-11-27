@@ -1,3 +1,7 @@
+## 1.3.0
+
+- **Octave shift** for every melodic instrument: hold **Left Shift** to play one octave higher, or **Left Alt** to play one octave lower. Three times the notes on the same keys, enough for longer songs (like Ode to Joy!). The nakers are not affected. Both keys can be changed in the settings. Thanks for the idea on Discord!
+
 ## 1.2.0
 
 - New instruments: **square piano** (Happy Bay), **kalimba** (Al'Nilem) and **shamisen** (Kicia Bay).

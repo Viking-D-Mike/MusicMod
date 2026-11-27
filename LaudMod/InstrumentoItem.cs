@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using BepInEx.Configuration;
+using UnityEngine;
 
 namespace LaudMod
 {
@@ -134,6 +135,16 @@ namespace LaudMod
             }
         }
 
+        // Octava: manteniendo la tecla de subir suena el doble de agudo; con la de bajar, la mitad
+        protected float FactorOctava()
+        {
+            if (Datos == LaudPlugin.Nacaires) return 1f;   // los tambores no cambian de octava
+            ConfigEntry<KeyCode> arriba = LaudPlugin.TeclaOctavaArriba, abajo = LaudPlugin.TeclaOctavaAbajo;
+            if (arriba != null && arriba.Value != KeyCode.None && Input.GetKey(arriba.Value)) return 2f;
+            if (abajo != null && abajo.Value != KeyCode.None && Input.GetKey(abajo.Value)) return 0.5f;
+            return 1f;
+        }
+
         protected void Golpe(int nota)
         {
             Instrumento d = Datos;
@@ -161,12 +172,13 @@ namespace LaudMod
             {
                 fuerza = Random.Range(0.8f, 1f);
             }
-            if (d.Desvios != null)
+            float octava = FactorOctava();
+            if (d.Desvios != null || octava != 1f)
             {
                 // Cada nota por su propia "voz", para poder cambiarle el tono sin tocar las que siguen sonando
                 AudioSource voz = VozLibre();
-                float semitonos = nota < d.Desvios.Length ? d.Desvios[nota] : 0f;
-                voz.pitch = Mathf.Pow(2f, semitonos / 12f);
+                float semitonos = d.Desvios != null && nota < d.Desvios.Length ? d.Desvios[nota] : 0f;
+                voz.pitch = Mathf.Pow(2f, semitonos / 12f) * octava;
                 voz.PlayOneShot(clip, d.Volumen.Value * fuerza);
                 return;
             }
@@ -302,6 +314,7 @@ namespace LaudMod
         private int notaSonando = -1;
         private float deslizar = tiempoDeslizar;
         private float tonoInicio = 1f;
+        private float octavaSonando = 1f;   // octava de la nota que suena (1 normal, 2 aguda, 0,5 grave)
 
         public override Instrumento Datos { get { return LaudPlugin.Flauta; } }
 
@@ -384,9 +397,10 @@ namespace LaudMod
             }
 
             bool hayNota = notaActual >= 0 && notaActual < d.Clips.Length && d.Clips[notaActual] != null;
+            float octava = activo ? FactorOctava() : octavaSonando;
 
-            // Nota nueva: entra por una fuente en silencio
-            if (hayNota && notaActual != notaSonando)
+            // Nota nueva (o la misma en otra octava): entra por una fuente en silencio
+            if (hayNota && (notaActual != notaSonando || octava != octavaSonando))
             {
                 int anterior = notaSonando;
                 activa = FuenteLibre();
@@ -414,7 +428,8 @@ namespace LaudMod
                     tonoInicio = 1f;
                     deslizar = tiempoDeslizar;
                 }
-                nueva.pitch = tonoInicio;
+                octavaSonando = octava;
+                nueva.pitch = tonoInicio * octavaSonando;
                 notaSonando = notaActual;
             }
             if (!hayNota)
@@ -428,11 +443,11 @@ namespace LaudMod
                 deslizar += Time.deltaTime;
                 float t = Mathf.Clamp01(deslizar / tiempoDeslizar);
                 t = t * t * (3f - 2f * t);
-                fuentes[activa].pitch = Mathf.Lerp(tonoInicio, 1f, t);
+                fuentes[activa].pitch = Mathf.Lerp(tonoInicio, 1f, t) * octavaSonando;
             }
             else
             {
-                fuentes[activa].pitch = 1f;
+                fuentes[activa].pitch = octavaSonando;
             }
 
             // Volumen de cada fuente
